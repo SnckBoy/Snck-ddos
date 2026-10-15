@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # Snck-ddos one-command installer
-# Repo hosts the full tree — clone + venv + deps
 set -euo pipefail
 
 REPO_GIT="https://github.com/SnckBoy/Snck-ddos.git"
@@ -44,6 +43,15 @@ pip install --upgrade pip -q
 pip install -r requirements.txt -q
 
 touch proxies.txt live_proxies.txt
+
+# build C++ L4 core if g++ present
+if command -v g++ >/dev/null 2>&1; then
+  echo "[*] building C++ L4 core..."
+  (cd cpp && bash build.sh) || echo "[!] C++ build failed — Python L4 still works"
+else
+  echo "[!] g++ not found — skip C++ core (Python L4 only)"
+fi
+
 chmod +x main.py install.sh 2>/dev/null || true
 
 echo ""
