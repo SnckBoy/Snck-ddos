@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 REPO="https://github.com/SnckBoy/Snck-ddos.git"
-DIR="\${HOME}/SNCK-Command-Center"
+DIR="${HOME}/SNCK-Command-Center"
 BRANCH="safe-command-center"
-PYTHON="\${PYTHON:-python3}"
+PYTHON="${PYTHON:-python3}"
 for bin in git "$PYTHON"; do command -v "$bin" >/dev/null 2>&1 || { echo "[!] Missing dependency: $bin"; exit 1; }; done
 if [ -d "$DIR/.git" ]; then
  git -C "$DIR" fetch origin "$BRANCH"
