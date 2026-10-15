@@ -120,19 +120,13 @@
       transition: opacity 0.15s;
     }
     button:hover { opacity: 0.85; }
-    .btn-start {
-      background: var(--red);
-      color: #fff;
-    }
+    .btn-start { background: var(--red); color: #fff; }
     .btn-stop {
       background: transparent;
       border: 1px solid var(--border);
       color: var(--muted);
     }
-    .btn-stop.active {
-      border-color: var(--red);
-      color: var(--red);
-    }
+    .btn-stop.active { border-color: var(--red); color: var(--red); }
     .btn-scrape {
       background: transparent;
       border: 1px solid var(--border);
@@ -151,11 +145,7 @@
       padding: 14px;
       text-align: center;
     }
-    .stat .v {
-      font-size: 1.35rem;
-      font-weight: 700;
-      color: var(--text);
-    }
+    .stat .v { font-size: 1.35rem; font-weight: 700; color: var(--text); }
     .stat .k {
       font-size: 0.65rem;
       color: var(--muted);
@@ -164,11 +154,7 @@
       letter-spacing: 0.08em;
     }
     .stat.highlight .v { color: var(--red); }
-    .proxy-info {
-      margin-top: 12px;
-      font-size: 0.75rem;
-      color: var(--muted);
-    }
+    .proxy-info { margin-top: 12px; font-size: 0.75rem; color: var(--muted); }
     .proxy-info strong { color: var(--green); }
     footer {
       margin-top: 28px;
@@ -195,13 +181,34 @@
           <div>
             <label>Method</label>
             <select id="method">
-              <option>GET</option>
-              <option>POST</option>
-              <option>HEAD</option>
-              <option>STRESS</option>
-              <option>SLOW</option>
-              <option>UDP</option>
-              <option>TCP</option>
+              <optgroup label="Layer 7">
+                <option>GET</option>
+                <option>POST</option>
+                <option>HEAD</option>
+                <option>STRESS</option>
+                <option>SLOW</option>
+                <option>PPS</option>
+                <option>COOKIE</option>
+                <option>RHEX</option>
+                <option>DYN</option>
+                <option>CFB</option>
+                <option>OVH</option>
+                <option>BYPASS</option>
+                <option>GSB</option>
+                <option>XMLRPC</option>
+              </optgroup>
+              <optgroup label="Layer 4">
+                <option>UDP</option>
+                <option>TCP</option>
+                <option>SYN</option>
+                <option>ACK</option>
+                <option>CPS</option>
+              </optgroup>
+              <optgroup label="Layer 3 / Game">
+                <option>ICMP</option>
+                <option>VSE</option>
+                <option>MCBOT</option>
+              </optgroup>
             </select>
           </div>
           <div>
@@ -249,7 +256,7 @@
       </div>
     </div>
 
-    <footer>Snck-ddos · panel on :6666 · authorized testing only</footer>
+    <footer>Snck-ddos · 22 methods · L3/L4/L7 · :6666 · authorized only</footer>
   </div>
 
   <script>
