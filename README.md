@@ -1,10 +1,8 @@
 # Snck-ddos
 
-High-volume stress / load-testing toolkit with a web control panel on **port 6666**.
+Web control panel + multi-method L3/L4/L7 engine + optional C++ ultra L4 core.
 
-Layer-7 methods (GET / POST / HEAD / STRESS / SLOW) with proxy rotation, plus Layer-4 UDP / TCP floods. Async workers + optional live proxy pool.
-
-> **Use only on systems you own or have explicit written authorization to test.** Unauthorized use is illegal.
+**Only use on systems you own or have written permission to test.** Unauthorized use is illegal.
 
 ---
 
@@ -22,7 +20,9 @@ source .venv/bin/activate
 python main.py
 ```
 
-Open **http://YOUR-IP:6666**
+Open **http://YOUR-IP:6767**  
+Health: **http://YOUR-IP:6767/health**  
+Firewall: `sudo ufw allow 6767/tcp`
 
 ---
 
@@ -37,38 +37,45 @@ pip install -r requirements.txt
 python main.py
 ```
 
+Optional env:
+
+```bash
+export SNCK_PORT=6767
+export SNCK_HOST=0.0.0.0
+```
+
 ---
 
 ## Features
 
 | Area | Detail |
 |------|--------|
-| Panel | FastAPI + dark UI on `:6666` |
-| L7 | GET, POST, HEAD, STRESS (large body), SLOW (slowloris-style) |
-| L4 | UDP flood, TCP connection flood |
-| Proxies | Scrape from public lists + concurrent live check |
-| Engine | asyncio + uvloop, configurable threads / duration / payload |
+| Panel | FastAPI dark UI on **:6767** (embedded HTML, always serves) |
+| L7 | GET POST HEAD STRESS SLOW PPS COOKIE RHEX DYN CFB OVH BYPASS GSB XMLRPC |
+| L4 | UDP TCP SYN ACK CPS |
+| L3 / Game | ICMP VSE MCBOT |
+| C++ L4 | `cpp/snck_l4` + `snck_ultra.sh` multi-process (Gbps-class on 10G/20G) |
+| Proxies | Public scrape + concurrent live check |
 | Stats | Live RPS, Mbps, workers, errors |
 
 ---
 
-## Throughput notes
+## Ultra L4 (C++)
 
-True multi-Gbps numbers require:
-
-- High-bandwidth VPS / dedicated (10G+ NIC)
-- Large live proxy pool (thousands of residential / datacenter)
-- For pure L4: raw sockets / kernel bypass (AF_XDP, DPDK) or amplification reflectors — not shipped in this userland build
-- Distributed workers across multiple machines pointing at the same target
-
-This panel maximizes what a single strong Python process can push. Scale out horizontally for higher aggregates.
+```bash
+cd ~/Snck-ddos/cpp
+bash build.sh
+./snck_ultra.sh udp TARGET_IP PORT 4 64 60 1200
+# method host port processes threads_per duration payload
+```
 
 ---
 
-## API (panel)
+## API
 
 | Endpoint | Method | Body |
 |----------|--------|------|
+| `/health` | GET | alive + engine status |
 | `/api/start` | POST | `{target, method, threads, duration, payload_size, use_proxies}` |
 | `/api/stop` | POST | — |
 | `/api/stats` | GET | live counters |
@@ -81,16 +88,20 @@ This panel maximizes what a single strong Python process can push. Scale out hor
 
 ```
 Snck-ddos/
-├── main.py              # entry — starts panel on 6666
-├── install.sh           # one-cmd installer
+├── main.py                 # entry — panel :6767
+├── install.sh              # one-cmd installer
 ├── requirements.txt
 ├── core/
-│   ├── engine.py        # attack workers
-│   └── proxy.py         # scrape + check
+│   ├── engine.py             # Python attack workers
+│   ├── proxy.py
+│   └── cpp_bridge.py
+├── cpp/
+│   ├── snck_l4.cpp           # ultra L4 core
+│   ├── build.sh
+│   └── snck_ultra.sh         # multi-process launcher
 ├── web/
-│   ├── app.py           # FastAPI routes
-│   └── templates/
-│       └── index.html   # control panel
+│   ├── app.py                # FastAPI routes + embedded UI
+│   └── templates/index.html  # legacy template (unused by default)
 ├── static/
 ├── proxies.txt
 └── live_proxies.txt
