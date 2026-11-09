@@ -8,9 +8,13 @@ Web control panel + multi-method L3/L4/L7 engine + optional C++ ultra L4 core.
 
 ## Quick install (one command)
 
+Installs **system packages + Python + git + g++ + venv + pip deps + firewall port** automatically:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/SnckBoy/Snck-ddos/main/install.sh | bash
 ```
+
+Uses `sudo` when needed. Supports Debian/Ubuntu, Fedora/RHEL, CentOS, Arch, Alpine.
 
 Then:
 
@@ -21,8 +25,7 @@ python main.py
 ```
 
 Open **http://YOUR-IP:6767**  
-Health: **http://YOUR-IP:6767/health**  
-Firewall: `sudo ufw allow 6767/tcp`
+Health: **http://YOUR-IP:6767/health**
 
 ---
 
@@ -89,7 +92,7 @@ bash build.sh
 ```
 Snck-ddos/
 ├── main.py                 # entry — panel :6767
-├── install.sh              # one-cmd installer
+├── install.sh              # full auto installer
 ├── requirements.txt
 ├── core/
 │   ├── engine.py             # Python attack workers
