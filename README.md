@@ -7,8 +7,8 @@ This safe configuration supports GET and HEAD only, exact-host allowlisting, ver
 ## Install
 
 ```bash
-git clone --depth 1 --branch safe-hardening-2026 https://github.com/SnckBoy/Snck-ddos.git
-cd Snck-ddos
+git clone --depth 1 --branch safe-hardening-2026 https://github.com/SnckBoy/Snck-ddos.git ~/SNCK-Command-Center
+cd ~/SNCK-Command-Center
 bash install.sh
 ```
 
