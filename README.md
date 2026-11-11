@@ -44,11 +44,11 @@ Then open http://127.0.0.1:6666 on your client.
 The default allowlist contains localhost and loopback IPs. To add exact hostnames or public IPs that you administer:
 
 ```bash
-export SNCK_TEST_ALLOWLIST="status.example.com,203.0.113.10"
+export SNCK_TEST_ALLOWLIST="status.yourdomain.com"
 python main.py
 ```
 
-Replace the sample values with your own authorized public hostnames/IPs. Non-local targets must resolve to public IP addresses and use port 80 or 443. Do not use wildcards.
+Replace the sample hostname with a real hostname you administer. Non-local targets must resolve to public IP addresses and use port 80 or 443. Do not use wildcards or documentation/example IP ranges.
 
 ## Telemetry
 
