@@ -86,7 +86,6 @@ state = {
 }
 history = deque(maxlen=50)
 stop_event = asyncio.Event()
-state_lock = asyncio.Lock()
 schedule_lock = asyncio.Lock()
 next_due = 0.0
 task: asyncio.Task | None = None
@@ -234,7 +233,11 @@ async def start(config: TestConfig):
                     finally:
                         state["workers"] -= 1
 
-                await asyncio.gather(*(worker() for _ in range(config.workers)))
+                try:
+                    async with asyncio.timeout_at(deadline):
+                        await asyncio.gather(*(worker() for _ in range(config.workers)))
+                except TimeoutError:
+                    pass
         finally:
             state["running"] = False
             state["workers"] = 0
