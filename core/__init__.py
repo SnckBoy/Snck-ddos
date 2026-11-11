@@ -1,1 +1,0 @@
-# Snck-ddos core

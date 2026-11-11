@@ -1,20 +1,35 @@
-# SNCK Command Center (safe mode)
+# SNCK Command Center
 
-Bounded HTTP/HTTPS health and load testing for systems you own or have explicit permission to test.
+Low-rate HTTP/HTTPS health checks for systems you administer.
 
-- Localhost bind by default at 127.0.0.1:6666.
-- Exact host allowlist: loopback by default; add authorized hosts with SNCK_TEST_ALLOWLIST.
-- GET/HEAD only, verified TLS, max 10 requests/sec, 5 workers and 60 seconds.
-- Live request rate, latency, success rate, received bandwidth, workers, stop control and 50-entry history.
-- No proxy rotation, IP spoofing, UDP/TCP floods, slow-client mode or amplification.
+- Loopback-only dashboard at 127.0.0.1:6666.
+- Exact-host allowlist.
+- Non-local DNS results must be globally routable; private/reserved destinations are rejected.
+- GET/HEAD only, verified TLS, redirects disabled, proxy environment ignored.
+- Maximum 10 requests/sec, 5 workers, 60 seconds and 1 MiB response body per request.
+- Public targets use ports 80/443; loopback may use a local development port.
+- Live request rate, latency, success rate, received bandwidth, stop control and 50-entry history.
 
-Install:
-curl -fsSL https://raw.githubusercontent.com/SnckBoy/Snck-ddos/safe-command-center/install-command-center.sh | bash
+Install from the default branch:
+
+```bash
+git clone --depth 1 --branch main https://github.com/SnckBoy/Snck-ddos.git ~/SNCK-Command-Center
+cd ~/SNCK-Command-Center
+bash install.sh
+```
 
 Run:
-cd ~/SNCK-Command-Center && source .venv/bin/activate && python command_center.py
 
-Open http://127.0.0.1:6666 locally. For a remote VPS, use:
-ssh -L 6666:127.0.0.1:6666 user@YOUR_VPS_IP
+```bash
+cd ~/SNCK-Command-Center
+source .venv/bin/activate
+python main.py
+```
 
-Allow specific hosts you administer by setting SNCK_TEST_ALLOWLIST to a comma-separated list of exact hostnames/IPs before launch. Keep the dashboard bound to localhost.
+For remote access, use an SSH tunnel:
+
+```bash
+ssh -L 6666:127.0.0.1:6666 user@YOUR_SERVER
+```
+
+Set SNCK_TEST_ALLOWLIST to a comma-separated list of exact authorized public hostnames/IPs before launch. Localhost and loopback are allowed by default.
