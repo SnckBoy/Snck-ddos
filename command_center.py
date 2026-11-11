@@ -59,7 +59,7 @@ class SafeResolver(AbstractResolver):
         results = []
         for addr_family, address in addresses:
             ip = ipaddress.ip_address(address.split("%", 1)[0])
-            if normalized in LOCAL_NAMES:
+            if normalized in LOCAL_NAMES | LOCAL_IPS:
                 if not ip.is_loopback:
                     raise OSError("localhost resolved to a non-loopback address")
             elif not ip.is_global:
@@ -170,6 +170,7 @@ async def start(config: TestConfig):
         })
         deadline = time.monotonic() + config.duration
         max_requests = config.rate * config.duration
+        scheduled_requests = 0
         connector = aiohttp.TCPConnector(
             limit=config.workers, ssl=True, resolver=SafeResolver(),
             use_dns_cache=False,
@@ -182,12 +183,14 @@ async def start(config: TestConfig):
             ) as session:
                 async def worker():
                     global next_due
+                    nonlocal scheduled_requests
                     state["workers"] += 1
                     try:
                         while not stop_event.is_set() and time.monotonic() < deadline:
                             async with schedule_lock:
-                                if state["requests"] >= max_requests:
+                                if scheduled_requests >= max_requests:
                                     break
+                                scheduled_requests += 1
                                 now = time.monotonic()
                                 due = max(now, next_due)
                                 next_due = due + 1 / config.rate
