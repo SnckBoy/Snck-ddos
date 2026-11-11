@@ -52,4 +52,20 @@ Replace the sample hostname with a real hostname you administer. Non-local targe
 
 ## Telemetry
 
-The dashboard reports request count, success rate, errors, latency, received bytes, estimated bandwidth, worker count and a 50-run history. Metrics are application-level and do not replace server-side monitoring.
+The dashboard reports request count, success rate, errors, latency, received bytes, estimated bandwidth, worker count and a 50-run in-memory history. Metrics are application-level and do not replace server-side monitoring. History is reset when the process restarts.
+
+## Tests
+
+Run the safety regression suite locally:
+
+```bash
+python -m pip install -r requirements.txt pytest
+python -m py_compile main.py command_center.py
+pytest -q
+```
+
+GitHub Actions runs compilation and the regression suite on Python 3.11, 3.12 and 3.13 for pushes to the feature branches and pull requests to `main`.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for deployment boundaries and vulnerability reporting guidance.
