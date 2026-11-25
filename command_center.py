@@ -125,7 +125,6 @@ def validate_target(raw: str) -> str:
         port = parsed.port or (443 if parsed.scheme == "https" else 80)
         if host not in ALLOWED_HOSTS:
             raise HTTPException(403, "Target host is not allowlisted. Set SNCK_TEST_ALLOWLIST to exact hosts you administer.")
-        # Public hosts are restricted to standard web ports. Loopback may use a local dev port.
         if host not in LOCAL_NAMES | LOCAL_IPS and port not in {80, 443}:
             raise HTTPException(400, "Non-standard ports are allowed only for loopback testing.")
         return raw.strip()
@@ -138,6 +137,12 @@ def validate_target(raw: str) -> str:
 @app.get("/", response_class=HTMLResponse)
 async def index():
     return PAGE
+
+
+@app.get("/api/health")
+async def api_health():
+    """Small readiness endpoint for local monitoring; it performs no network checks."""
+    return {"ok": True, "service": "snck-command-center", "running": state["running"]}
 
 
 @app.get("/api/stats")
@@ -279,8 +284,5 @@ $("form").onsubmit=async event=>{event.preventDefault();try{await api("/api/star
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        app, host=os.getenv("SNCK_BIND_HOST", "127.0.0.1"),
-        port=int(os.getenv("SNCK_PORT", "6666")),
-    )
+    from launcher import main
+    main()
